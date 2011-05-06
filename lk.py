@@ -23,7 +23,7 @@ def build_parser():
                        help='a python re regular expression')
     parser.add_argument('--ignore-case', '-i',  dest='ignorecase', action='store_true',
                        default=False, help='ignore case when searching')
-    parser.add_argument('--no-unicode', '-x', dest='unicode', action='store_false',
+    parser.add_argument('--no-unicode', '-u', dest='unicode', action='store_false',
                        default=True, help='unicode-unfriendly searching')
     parser.add_argument('--no-multiline', '-l', dest='multiline',
                        action='store_false', default=True,
@@ -37,6 +37,9 @@ def build_parser():
     parser.add_argument('--num-processes', '-p', dest='numprocesses',
                        action='store', default=10, type=int,
                        help='number of child processes to concurrently search with')
+    parser.add_argument('--exclude', '-x', dest='exclude',
+                       action='store', default=None, type=str,
+                       help='exclude_directories')
     parser.add_argument('--debug', '-d', dest='debug',
                        action='store_true', default=False,
                        help='print debug output')
@@ -190,8 +193,8 @@ def main():
     regex = re.compile(args.pattern, flags)
     directory = args.directory
 
-    if not args.debug:
-        sys.stderr = NullDevice()
+#    if not args.debug:
+#        sys.stderr = NullDevice()
 
     search_manager = SearchManager(regex, args.numprocesses)
     results = search_manager.search(directory, followlinks=args.followlinks)
