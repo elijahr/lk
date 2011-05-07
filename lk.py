@@ -75,8 +75,9 @@ class SearchManager(object):
         def search_walk():
             for packed in walk(directory, followlinks=self.follow_links):
                 directory_path, directory_names, file_names = packed
-                yield (directory_path, filtered(directory_names),
-                       filtered(file_names))
+                directory_names[:] = filtered(directory_names)
+                file_names[:] = filtered(file_names)
+                yield directory_path, directory_names, file_names
 
         for directory_path, directory_names, file_names in search_walk():
             args = (self.regex, directory_path, file_names)
