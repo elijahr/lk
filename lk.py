@@ -1,14 +1,9 @@
 #!/usr/bin/env python
-
 """
 A programmer's search tool
 """
-
-
 import re
-from multiprocessing import Pool, Manager
-import thread
-import socket
+from multiprocessing import Pool, Manager, Process
 import sys
 from os import sep as directory_separator, getcwd, path, walk
 
@@ -28,141 +23,148 @@ def build_parser():
     parser.add_argument('--no-multiline', '-l', dest='multiline',
                        action='store_false', default=True,
                        help='don\'t search over multiple lines')
-    parser.add_argument('--follow-links', '-s', dest='followlinks',
+    parser.add_argument('--follow-links', '-s', dest='follow_links',
                        action='store_true', default=False,
                        help='follow symlinks')
-    parser.add_argument('--hidden', '-n', dest='searchhidden',
+    parser.add_argument('--hidden', '-n', dest='search_hidden',
                        action='store_true', default=False,
                        help='search hidden files and directories')
-    parser.add_argument('--num-processes', '-p', dest='numprocesses',
+    parser.add_argument('--num-processes', '-p', dest='number_processes',
                        action='store', default=10, type=int,
                        help='number of child processes to concurrently search with')
     parser.add_argument('--exclude', '-x', dest='exclude',
                        action='store', default=None, type=str,
-                       help='exclude_directories')
+                       help='exclude')
     parser.add_argument('--debug', '-d', dest='debug',
                        action='store_true', default=False,
                        help='print debug output')
     parser.add_argument('directory', metavar='DIRECTORY', nargs='?',
-                       default=getcwd())
+                       default=getcwd(), help='a directory to search in (default cwd)')
 
     return parser
 
 def get_text_file_contents(path):
     # if this isn't a text file, we should raise an IOError
     f = open(path, 'r')
-    contents = f.read()
+    file_contents = f.read()
     f.close()
-    if contents.find('\000') >= 0:
+    if file_contents.find('\000') >= 0:
         raise IOError('Not a text file')
-    return contents
-
-def get_linebreak_positions(text):
-    while True:
-        position = text.find
+    return file_contents
 
 class SearchManager(object):
-    def __init__(self, regex, numprocesses=10, searchhidden=False, followlinks=False):
+    def __init__(self, regex, number_processes=10, chunk_size=10,
+                 search_hidden=False, follow_links=False):
         self.regex = regex
-        self.searchhidden = searchhidden
-        self.followlinks = followlinks
-        self.pool = Pool(processes=numprocesses)
+        self.search_hidden = search_hidden
+        self.follow_links = follow_links
+        self.pool = Pool(processes=number_processes)
+        self.chunk_size = chunk_size
+        self.manager = Manager()
 
-    def search(self, directory, followlinks=False):
-        def is_excluded(name):
-            if not self.searchhidden and name.startswith('.'):
-                return True
+    def search(self, directory):
+        all_results = {}
+
+        if self.search_hidden:
+            def filtered(names):
+                return names
+        else:
+            def filtered(names):
+                return [name for name in names if not name.startswith('.')]
 
         def search_walk():
-            for packed in walk(directory, followlinks=followlinks):
-                dirpath, dirnames, filenames = packed
-                dirnames[:] = [
-                    dn for dn in dirnames
-                    if not is_excluded(dn)]
+            for packed in walk(directory, followlinks=self.follow_links):
+                directory_path, directory_names, file_names = packed
+                yield (directory_path, filtered(directory_names),
+                       filtered(file_names))
 
-                yield dirpath, dirnames, filenames
+        for directory_path, directory_names, file_names in search_walk():
+#            search_path(self.manager, self.regex, directory_path, file_names)
+            self.pool.apply_async(search_path, (self.regex,
+                                                           directory_path,
+                                                           file_names),
+                                  {}, print_result)
 
-        all_results = {}
-        try:
-            mutex = Manager().Lock()
-            async_results = []
-            for packed in search_walk():
-                dirpath, dirnames, filenames = packed
-                args = (self.regex, dirpath, filenames, mutex)
-                async_result = self.pool.apply_async(finder_wrapper, args)
-                async_results.append(async_result)
+class ColorWriter:
+    GREEN = '\033[92m'
+    BLUE = '\033[94m'
+    END_COLOR = '\033[0m'
 
-            for async_result in async_results:
-                dirname, results = async_result.get()
-                if len(results.keys()):
-                    all_results[dirname] = results
+    def __init__(self, output=None):
+        if output == None:
+            output = sys.stdout
+        self.output = output
 
-        except KeyboardInterrupt, KeyboardInterruptError:
-            try:
-                self.pool.terminate()
-            except socket.error:
-                pass
-        return all_results
+    def write(self, text):
+        self.output.write(text)
 
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
+    def write_green(self, text):
+        self.output.write(self.GREEN + text + self.END_COLOR)
 
-class KeyboardInterruptError(Exception):
-    pass
+    def write_blue(self, text):
+        self.output.write(self.BLUE + text + self.END_COLOR)
 
-def finder_wrapper(*args, **kwargs):
-    try:
-        return finder(*args, **kwargs)
-    except KeyboardInterrupt:
-        raise KeyboardInterruptError()
-
-def finder(regex, dirname, names, mutex):
-    results = {}
+def search_path(regex, directory_path, names):
+    result = DirectoryResult(directory_path)
     def find_matches(name):
-        fullpath = path.join(dirname, name)
-        contents = get_text_file_contents(fullpath)
-#        linebreaks = get_linebreak_positions(contents)
+        full_path = path.join(directory_path, name)
+        file_contents = get_text_file_contents(full_path)
         start = 0
-        while True:
-            match = regex.search(contents, start)
-            if match:
-                if not len(results.keys()):
-                    mutex.acquire()
-                    sys.stdout.write(bcolors.OKGREEN + fullpath + ':' + \
-                                    bcolors.ENDC + '\n')
-                group = match.group()
-                match_start = match.start()
-                linenum = contents.count('\n', 0, match_start) + 1
-                offset = match_start - contents.rfind('\n', 0, match_start)
-                roffset = contents.find('\n', match_start)
-                line = contents[1+match_start-offset:match_start] + bcolors.OKBLUE + \
-                       group + bcolors.ENDC + contents[match_start+len(group):roffset]
-                packed = (group, linenum, offset)
-                sys.stdout.write('%s: %s\n' % (linenum, line))
-                if name in results:
-                    results[name].append(packed)
-                else:
-                    results[name] = [packed]
-
-                start = match.end()
-            else:
-                if name in results:
-                    try:
-                        mutex.release()
-                    except thread.error:
-                        pass
-                break
+        match = regex.search(file_contents, start)
+        while match:
+            result.put(name, file_contents, match)
+            start = match.end()
+            match = regex.search(file_contents, start)
     for name in names:
         try:
             find_matches(name)
         except IOError:
             pass
-    return dirname, results
+    return result
+
+class DirectoryResult(object):
+    def __init__(self, directory_path):
+        self.directory_path = directory_path
+        self._line_results = {}
+
+    def put(self, file_name, file_contents, regex_match):
+        group = regex_match.group()
+        match_start = regex_match.start()
+        line_number = file_contents.count('\n', 0, match_start) + 1
+        left_offset = match_start - file_contents.rfind('\n', 0, match_start)
+        right_offset = file_contents.find('\n', match_start)
+        left_of_group = file_contents[1+match_start-left_offset:match_start]
+        right_of_group = file_contents[match_start+len(group):right_offset]
+        line_result = LineResult(line_number, left_offset,
+                                 left_of_group, group, right_of_group)
+
+        if not file_name in self._line_results:
+            self._line_results[file_name] = []
+        self._line_results[file_name].append(line_result)
+
+    def get_line_results(self):
+        return self._line_results.items()
+
+class LineResult(object):
+    def __init__(self, line_number, left_offset, left_of_group,
+                 group, right_of_group):
+        self.line_number = line_number
+        self.left_offset = left_offset
+        self.left_of_group = left_of_group # left of group
+        self.group = group
+        self.right_of_group = right_of_group # right of group
+
+def print_result(directory_result):
+    writer = ColorWriter(sys.stdout)
+    for file_name, line_results in directory_result.get_line_results():
+        full_path = path.join(directory_result.directory_path, file_name)
+        writer.write_green(full_path+':')
+        writer.write('\n')
+        for line_result in line_results:
+            writer.write('%s: ' % (line_result.line_number))
+            writer.write(line_result.left_of_group)
+            writer.write_blue(line_result.group)
+            writer.write(line_result.right_of_group+'\n')
 
 def main():
     # parse arguments
@@ -193,14 +195,15 @@ def main():
     regex = re.compile(args.pattern, flags)
     directory = args.directory
 
+#    TODO: fix this
 #    if not args.debug:
 #        sys.stderr = NullDevice()
 
-    search_manager = SearchManager(regex, args.numprocesses)
-    results = search_manager.search(directory, followlinks=args.followlinks)
+    search_manager = SearchManager(regex, number_processes=args.number_processes,
+                                   search_hidden=args.search_hidden,
+                                   follow_links=args.follow_links)
 
-#    from pprint import pprint
-#    pprint(results)
+    search_manager.search(directory)
 
 if __name__ == '__main__':
     main()
