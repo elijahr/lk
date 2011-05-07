@@ -79,11 +79,8 @@ class SearchManager(object):
                        filtered(file_names))
 
         for directory_path, directory_names, file_names in search_walk():
-#            search_path(self.manager, self.regex, directory_path, file_names)
-            self.pool.apply_async(search_path, (self.regex,
-                                                           directory_path,
-                                                           file_names),
-                                  {}, print_result)
+            args = (self.regex, directory_path, file_names)
+            self.pool.apply_async(search_path, args, callback=print_result)
 
 class ColorWriter:
     GREEN = '\033[92m'
