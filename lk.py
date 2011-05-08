@@ -13,35 +13,38 @@ class NullDevice():
 
 def build_parser():
     import argparse
-    parser = argparse.ArgumentParser(description='A programmer\'s search tool')
+    parser = argparse.ArgumentParser(description="A programmer's search tool")
     parser.add_argument('pattern', metavar='PATTERN', action='store',
-                       help='a python re regular expression')
+                        help='a python re regular expression')
     parser.add_argument('--ignore-case', '-i',  dest='ignorecase', action='store_true',
-                       default=False, help='ignore case when searching')
+                        default=False, help='ignore case when searching')
     parser.add_argument('--no-unicode', '-u', dest='unicode', action='store_false',
-                       default=True, help='unicode-unfriendly searching')
+                        default=True, help='unicode-unfriendly searching')
     parser.add_argument('--no-multiline', '-l', dest='multiline',
-                       action='store_false', default=True,
-                       help='don\'t search over multiple lines')
+                        action='store_false', default=True,
+                        help='don\'t search over multiple lines')
+    parser.add_argument('--dot-all', '-a', dest='dot_all',
+                        action='store_true', default=False,
+                        help='dot in pattern matches newline')
     parser.add_argument('--follow-links', '-s', dest='follow_links',
-                       action='store_true', default=False,
-                       help='follow symlinks')
+                        action='store_true', default=False,
+                        help='follow symlinks')
     parser.add_argument('--hidden', '-n', dest='search_hidden',
-                       action='store_true', default=False,
-                       help='search hidden files and directories')
+                        action='store_true', default=False,
+                        help='search hidden files and directories')
     parser.add_argument('--num-processes', '-p', dest='number_processes',
-                       action='store', default=10, type=int,
-                       help='number of child processes to concurrently search with')
+                        action='store', default=10, type=int,
+                        help='number of child processes to concurrently search with')
     parser.add_argument('--exclude', '-x', dest='exclude',
-                       action='store', default=None, type=str,
-                       help='exclude')
+                        action='store', default=None, type=str,
+                        help='exclude')
     parser.add_argument('--debug', '-d', dest='debug',
-                       action='store_true', default=False,
-                       help='print debug output')
+                        action='store_true', default=False,
+                        help='print debug output')
     parser.add_argument('directory', metavar='DIRECTORY', nargs='?',
-                       default=getcwd(), help='a directory to search in (default cwd)')
-
+                        default=getcwd(), help='a directory to search in (default cwd)')
     return parser
+
 
 def get_text_file_contents(path):
     # if this isn't a text file, we should raise an IOError
@@ -83,7 +86,7 @@ class SearchManager(object):
             args = (self.regex, directory_path, file_names)
             self.pool.apply_async(search_path, args, callback=print_result)
 
-class ColorWriter:
+class ColorWriter(object):
     GREEN = '\033[92m'
     BLUE = '\033[94m'
     END_COLOR = '\033[0m'
@@ -179,7 +182,10 @@ def main():
     """
 
     args = parser.parse_args()
-    flags = re.LOCALE | re.DOTALL
+    flags = re.LOCALE
+
+    if args.dot_all:
+        flags |= re.DOTALL
 
     if args.ignorecase:
         flags |= re.IGNORECASE
