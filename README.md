@@ -3,14 +3,15 @@
 
 Notes
 -----
-1. Inspired by [ack](http://betterthangrep.com/)
-2. Written in Python
-3. Parallel search using Python's multiprocessing library
-4. Is a script and a library, can be used in other Python scripts
+- Written in Python
+- Inspired by [ack](http://betterthangrep.com/)
+- Parallelism: searches directories in parallel using Python's multiprocessing library
+- Makes searching from Python programs easy via 'import lk'
 
 Examples
 -------
-    # search for the word 'class' in the current working directory
+Search for the word 'class' in the current working directory
+
     $ lk class
     /home/elijah/Development/lk/lk.py:
     10: class NullDevice():
@@ -19,7 +20,8 @@ Examples
     122: class DirectoryResult(object):
     145: class LineResult(object):
 
-    # search for the regex "line_.*" in /home/elijah/Development/lk/
+Search for the regex "line_.*" in /home/elijah/Development/lk/
+
     $ lk "line_.*" /home/elijah/Development/lk/
     /home/elijah/Development/lk/lk.py:
     129:         self._line_results = {}
