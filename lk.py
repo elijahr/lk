@@ -7,11 +7,11 @@ from multiprocessing import Pool, Manager, Process
 import sys
 from os import sep as directory_separator, getcwd, path, walk
 
-class NullDevice():
-    def write(self, s):
-        pass
-
 def build_parser():
+    """
+    Returns an argparse.ArgumentParser instance to parse the command line
+    arguments for lk
+    """
     import argparse
     parser = argparse.ArgumentParser(description="A programmer's search tool")
     parser.add_argument('pattern', metavar='PATTERN', action='store',
@@ -35,27 +35,33 @@ def build_parser():
     parser.add_argument('--num-processes', '-p', dest='number_processes',
                         action='store', default=10, type=int,
                         help='number of child processes to concurrently search with')
-    parser.add_argument('--exclude', '-x', dest='exclude',
-                        action='store', default=None, type=str,
-                        help='exclude')
-    parser.add_argument('--debug', '-d', dest='debug',
-                        action='store_true', default=False,
-                        help='print debug output')
+#    parser.add_argument('--exclude', '-x', metavar='GLOB', dest='exclude',
+#                        action='store', default=None, type=str,
+#                        help='exclude')
+#    parser.add_argument('--debug', '-d', dest='debug',
+#                        action='store_true', default=False,
+#                        help='print debug output')
     parser.add_argument('directory', metavar='DIRECTORY', nargs='?',
                         default=getcwd(), help='a directory to search in (default cwd)')
     return parser
 
-
-def get_text_file_contents(path):
+def get_file_contents(path, binary=False):
+    """
+    Return the contents of the text file at path.
+    If it is a binary file,raise an IOError
+    """
     # if this isn't a text file, we should raise an IOError
     f = open(path, 'r')
     file_contents = f.read()
     f.close()
-    if file_contents.find('\000') >= 0:
-        raise IOError('Not a text file')
+    if not binary and file_contents.find('\000') >= 0:
+        raise IOError('Expected text file, got binary file')
     return file_contents
 
 class SearchManager(object):
+    """
+    An object for handling parallel searches of a regex
+    """
     def __init__(self, regex, number_processes=10, chunk_size=10,
                  search_hidden=False, follow_links=False):
         self.regex = regex
@@ -66,6 +72,10 @@ class SearchManager(object):
         self.manager = Manager()
 
     def search(self, directory):
+        """
+        start a new pool of parallel search processes for self.regex in
+        directory
+        """
         all_results = {}
 
         if self.search_hidden:
@@ -87,6 +97,9 @@ class SearchManager(object):
             self.pool.apply_async(search_path, args, callback=print_result)
 
 class ColorWriter(object):
+    """'
+    an object that wraps a file handler and can output ANSI color codes
+    """
     GREEN = '\033[92m'
     BLUE = '\033[94m'
     END_COLOR = '\033[0m'
@@ -106,10 +119,13 @@ class ColorWriter(object):
         self.output.write(self.BLUE + text + self.END_COLOR)
 
 def search_path(regex, directory_path, names):
+    """
+    build a DirectoryResult for the given regex, directory path, and file names
+    """
     result = DirectoryResult(directory_path)
     def find_matches(name):
         full_path = path.join(directory_path, name)
-        file_contents = get_text_file_contents(full_path)
+        file_contents = get_file_contents(full_path)
         start = 0
         match = regex.search(file_contents, start)
         while match:
@@ -124,6 +140,10 @@ def search_path(regex, directory_path, names):
     return result
 
 class DirectoryResult(object):
+    """
+    A container object for storing LineResult instances for text files within
+    the directory at directory_path
+    """
     def __init__(self, directory_path):
         self.directory_path = directory_path
         self._line_results = {}
@@ -147,6 +167,10 @@ class DirectoryResult(object):
         return self._line_results.items()
 
 class LineResult(object):
+    """
+    An object for storing metadata about search matches on one line of a text
+    file
+    """
     def __init__(self, line_number, left_offset, left_of_group,
                  group, right_of_group):
         self.line_number = line_number
@@ -155,8 +179,12 @@ class LineResult(object):
         self.group = group
         self.right_of_group = right_of_group # right of group
 
+writer = ColorWriter(sys.stdout)
 def print_result(directory_result):
-    writer = ColorWriter(sys.stdout)
+    """
+    Print out the contents of the directory result, using ANSI color codes if
+    supported
+    """
     for file_name, line_results in directory_result.get_line_results():
         full_path = path.join(directory_result.directory_path, file_name)
         writer.write_green(full_path+':')
@@ -168,18 +196,10 @@ def print_result(directory_result):
             writer.write(line_result.right_of_group+'\n')
 
 def main():
-    # parse arguments
+    """
+    if lk.py is run as a script, this function will run
+    """
     parser = build_parser()
-
-    """
-    options:
-    install - make a symlink at /usr/local/bin/lk
-    replace
-    ignore files matching glob or pattern
-    config (set config options, like git)
-    open files with app (including mac friendly syntax using the "open -a" cmd)
-    default: ignore .git, .svn, .hg, etc
-    """
 
     args = parser.parse_args()
     flags = re.LOCALE
@@ -196,17 +216,15 @@ def main():
     if args.multiline:
         flags |= re.MULTILINE
 
-    regex = re.compile(args.pattern, flags)
-    directory = args.directory
-
-#    TODO: fix this
 #    if not args.debug:
 #        sys.stderr = NullDevice()
+
+    regex = re.compile(args.pattern, flags)
+    directory = args.directory
 
     search_manager = SearchManager(regex, number_processes=args.number_processes,
                                    search_hidden=args.search_hidden,
                                    follow_links=args.follow_links)
-
     search_manager.search(directory)
 
 if __name__ == '__main__':
