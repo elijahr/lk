@@ -41,6 +41,10 @@ Search for the regex "line_.*" in /home/elijah/Development/lk/
     167:             writer.write_blue(line_result.group)
     168:             writer.write(line_result.right_of_group+'\n')
 
+Installation
+------------
+    $ sudo python setup.py install
+
 Usage
 -----
     lk [-h] [--ignore-case] [--no-unicode] [--no-multiline] [--dot-all]
@@ -66,6 +70,6 @@ Usage
                             exclude
       --debug, -d           print debug output
 
-Installation
-------------
-    $ sudo python setup.py install
+Issues?
+-------
+Please report any encountered bugs at http://github.com/elijahr/lk/issues
