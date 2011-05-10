@@ -45,6 +45,16 @@ Installation
 ------------
     $ sudo python setup.py install
 
+Bleeding Edge Installation
+--------------------------
+If you want to use the latest and greatest version of lk:
+    $ git clone git://github.com/elijahr/lk.git
+    $ cd lk
+    $ sudo chmod +x lk.py
+    $ sudo ln -s `pwd`/lk.py /usr/local/bin/lk
+Then whenever you feel like updating to the latest, just do this:
+    $ cd lk && git pull
+
 Usage
 -----
     lk [-h] [--ignore-case] [--no-unicode] [--no-multiline] [--dot-all]
