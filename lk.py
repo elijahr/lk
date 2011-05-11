@@ -29,7 +29,7 @@ def build_parser():
                         help='dot in pattern matches newline')
     parser.add_argument('--follow-links', '-s', dest='follow_links',
                         action='store_true', default=False,
-                        help='follow symlinks')
+                        help='follow symlinks (ignored in Python < 2.6)')
     parser.add_argument('--hidden', '-n', dest='search_hidden',
                         action='store_true', default=False,
                         help='search hidden files and directories')
@@ -45,7 +45,7 @@ def build_parser():
     parser.add_argument('--open-with', '-o', metavar='COMMAND',
                         dest='command_strings', action='append', default=[],
                         type=str,
-                        help='run each COMMAND where COMMAND is a string with a placeholder, %s, for the absolute path of the matched file')
+                        help='run each COMMAND where COMMAND is a string with a placeholder, %%s, for the absolute path of the matched file')
 #    parser.add_argument('--debug', '-d', dest='debug',
 #                        action='store_true', default=False,
 #                        help='print debug output')
@@ -102,7 +102,11 @@ class SearchManager(object):
             return True
 
         def search_walk():
-            for packed in walk(directory, followlinks=self.follow_links):
+            if sys.version_info >= (2, 6):
+                walk_generator = walk(directory, followlinks=self.follow_links)
+            else:
+                walk_generator = walk(directory)
+            for packed in walk_generator:
                 directory_path, directory_names, file_names = packed
                 directory_names[:] = filter(filt, directory_names)
                 file_names[:] = filter(filt, file_names)
