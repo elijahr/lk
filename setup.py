@@ -28,4 +28,4 @@ setup(name='lk',
       classifiers=['License :: OSI Approved :: MIT License', 'Topic :: System :: Systems Administration', 'Topic :: Utilities'],
       cmdclass={'install': install},
       url = 'http://github.com/elijahr/lk',
-      download_url = 'https://github.com/elijahr/lk/tarball/master')
+      download_url = 'https://github.com/downloads/elijahr/lk/lk-1.0.tar.gz')
