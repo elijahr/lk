@@ -1,11 +1,9 @@
 Arguments
 ---------
 - Find and replace
-- Implement --exclude GLOB
 - Implement --binary to allow searching in binary files
 - Implement --debug
     - hide KeyboardInterrupts unless debug is on
-- Open matched files in editor (including mac friendly syntax using the "open -a" cmd)
 
 Config
 ------
