@@ -218,7 +218,8 @@ def print_result(directory_result):
     """
     for file_name, line_results in directory_result.iter_line_results_items():
         full_path = path.join(directory_result.directory_path, file_name)
-        writer.write_green(full_path+':')
+        writer.write('\n')
+        writer.write_green('%s:' % full_path)
         writer.write('\n')
         for line_result in line_results:
             writer.write('%s: ' % (line_result.line_number))
@@ -258,10 +259,12 @@ def main():
         re.compile(exclude_path_pattern, exclude_path_flags)
         for exclude_path_pattern in args.exclude_path_patterns]
 
-    search_manager = SearchManager(regex, number_processes=args.number_processes,
+    search_manager = SearchManager(regex, 
+                                   number_processes=args.number_processes,
                                    search_hidden=args.search_hidden,
                                    follow_links=args.follow_links,
                                    search_binary=args.search_binary)
+
     search_manager.search(directory, exclude_path_regexes=exclude_path_regexes,
                           command_strings=args.command_strings)
 
