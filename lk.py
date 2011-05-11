@@ -3,8 +3,9 @@
 A programmer's search tool
 """
 import re
-from multiprocessing import Pool, Manager, Process
 import sys
+from subprocess import Popen
+from multiprocessing import Pool, Manager, Process
 from os import sep as directory_separator, getcwd, path, walk
 
 def build_parser():
@@ -32,12 +33,19 @@ def build_parser():
     parser.add_argument('--hidden', '-n', dest='search_hidden',
                         action='store_true', default=False,
                         help='search hidden files and directories')
+    parser.add_argument('--binary', '-b', dest='search_binary',
+                        action='store_true', default=False,
+                        help='search binary files')
     parser.add_argument('--num-processes', '-p', dest='number_processes',
                         action='store', default=10, type=int,
                         help='number of child processes to concurrently search with')
-#    parser.add_argument('--exclude', '-x', metavar='GLOB', dest='exclude',
-#                        action='store', default=None, type=str,
-#                        help='exclude')
+    parser.add_argument('--exclude', '-x', metavar='PATH_PATTERN', dest='exclude_path_patterns',
+                        action='append', default=[], type=str,
+                        help='exclude paths matching PATH_PATTERN')
+    parser.add_argument('--open-with', '-o', metavar='COMMAND',
+                        dest='command_strings', action='append', default=[],
+                        type=str,
+                        help='run each COMMAND where COMMAND is a string with a placeholder, %s, for the absolute path of the matched file')
 #    parser.add_argument('--debug', '-d', dest='debug',
 #                        action='store_true', default=False,
 #                        help='print debug output')
@@ -62,39 +70,57 @@ class SearchManager(object):
     """
     An object for handling parallel searches of a regex
     """
+
+    hidden_file_regex = re.compile('^\..*$', re.UNICODE | re.LOCALE)
+
     def __init__(self, regex, number_processes=10, chunk_size=10,
-                 search_hidden=False, follow_links=False):
+                 search_hidden=False, follow_links=False, search_binary=False):
         self.regex = regex
         self.search_hidden = search_hidden
         self.follow_links = follow_links
+        self.search_binary = search_binary
         self.pool = Pool(processes=number_processes)
         self.chunk_size = chunk_size
         self.manager = Manager()
 
-    def search(self, directory):
+    def search(self, directory, exclude_path_regexes=[], command_strings=[]):
         """
         start a new pool of parallel search processes for self.regex in
         directory
         """
-        all_results = {}
+        if not self.search_hidden:
+            exclude_path_regexes.append(self.hidden_file_regex)
 
-        if self.search_hidden:
-            def filtered(names):
-                return names
-        else:
-            def filtered(names):
-                return [name for name in names if not name.startswith('.')]
+        def filt(name):
+            """
+            return True if name matches on of the regexes in
+            exclude_path_regexes, False otherwise
+            """
+            for exclude_path_regex in exclude_path_regexes:
+                for found in exclude_path_regex.finditer(name):
+                    return False
+            return True
 
         def search_walk():
             for packed in walk(directory, followlinks=self.follow_links):
                 directory_path, directory_names, file_names = packed
-                directory_names[:] = filtered(directory_names)
-                file_names[:] = filtered(file_names)
+                directory_names[:] = filter(filt, directory_names)
+                file_names[:] = filter(filt, file_names)
                 yield directory_path, directory_names, file_names
 
+        def callback(directory_result):
+            print_result(directory_result)
+            for command_string in command_strings:
+                if command_string.find('%s') < 0:
+                    command_string += ' %s'
+                for file_name, line_result in directory_result.iter_line_results_items():
+                    file_path = path.join(directory_result.directory_path, file_name)
+                    Popen(command_string % file_path, shell=True)
+                    break
+
         for directory_path, directory_names, file_names in search_walk():
-            args = (self.regex, directory_path, file_names)
-            self.pool.apply_async(search_path, args, callback=print_result)
+            args = (self.regex, directory_path, file_names, self.search_binary)
+            self.pool.apply_async(search_path, args, callback=callback)
 
 class ColorWriter(object):
     """'
@@ -118,14 +144,14 @@ class ColorWriter(object):
     def write_blue(self, text):
         self.output.write(self.BLUE + text + self.END_COLOR)
 
-def search_path(regex, directory_path, names):
+def search_path(regex, directory_path, names, binary):
     """
     build a DirectoryResult for the given regex, directory path, and file names
     """
     result = DirectoryResult(directory_path)
     def find_matches(name):
         full_path = path.join(directory_path, name)
-        file_contents = get_file_contents(full_path)
+        file_contents = get_file_contents(full_path, binary)
         start = 0
         match = regex.search(file_contents, start)
         while match:
@@ -163,8 +189,9 @@ class DirectoryResult(object):
             self._line_results[file_name] = []
         self._line_results[file_name].append(line_result)
 
-    def get_line_results(self):
-        return self._line_results.items()
+    def iter_line_results_items(self):
+        for item in self._line_results.iteritems():
+            yield item
 
 class LineResult(object):
     """
@@ -185,7 +212,7 @@ def print_result(directory_result):
     Print out the contents of the directory result, using ANSI color codes if
     supported
     """
-    for file_name, line_results in directory_result.get_line_results():
+    for file_name, line_results in directory_result.iter_line_results_items():
         full_path = path.join(directory_result.directory_path, file_name)
         writer.write_green(full_path+':')
         writer.write('\n')
@@ -219,13 +246,20 @@ def main():
 #    if not args.debug:
 #        sys.stderr = NullDevice()
 
+    exclude_path_flags = re.UNICODE | re.LOCALE
+
     regex = re.compile(args.pattern, flags)
     directory = args.directory
+    exclude_path_regexes = [
+        re.compile(exclude_path_pattern, exclude_path_flags)
+        for exclude_path_pattern in args.exclude_path_patterns]
 
     search_manager = SearchManager(regex, number_processes=args.number_processes,
                                    search_hidden=args.search_hidden,
-                                   follow_links=args.follow_links)
-    search_manager.search(directory)
+                                   follow_links=args.follow_links,
+                                   search_binary=args.search_binary)
+    search_manager.search(directory, exclude_path_regexes=exclude_path_regexes,
+                          command_strings=args.command_strings)
 
 if __name__ == '__main__':
     main()
