@@ -33,6 +33,9 @@ def build_parser():
     parser.add_argument('--hidden', '-n', dest='search_hidden',
                         action='store_true', default=False,
                         help='search hidden files and directories')
+    parser.add_argument('--binary', '-b', dest='search_binary',
+                        action='store_true', default=False,
+                        help='search binary files')
     parser.add_argument('--num-processes', '-p', dest='number_processes',
                         action='store', default=10, type=int,
                         help='number of child processes to concurrently search with')
@@ -71,10 +74,11 @@ class SearchManager(object):
     hidden_file_regex = re.compile('^\..*$', re.UNICODE | re.LOCALE)
 
     def __init__(self, regex, number_processes=10, chunk_size=10,
-                 search_hidden=False, follow_links=False):
+                 search_hidden=False, follow_links=False, search_binary=False):
         self.regex = regex
         self.search_hidden = search_hidden
         self.follow_links = follow_links
+        self.search_binary = search_binary
         self.pool = Pool(processes=number_processes)
         self.chunk_size = chunk_size
         self.manager = Manager()
@@ -115,7 +119,7 @@ class SearchManager(object):
                     break
 
         for directory_path, directory_names, file_names in search_walk():
-            args = (self.regex, directory_path, file_names)
+            args = (self.regex, directory_path, file_names, self.search_binary)
             self.pool.apply_async(search_path, args, callback=callback)
 
 class ColorWriter(object):
@@ -140,14 +144,14 @@ class ColorWriter(object):
     def write_blue(self, text):
         self.output.write(self.BLUE + text + self.END_COLOR)
 
-def search_path(regex, directory_path, names):
+def search_path(regex, directory_path, names, binary):
     """
     build a DirectoryResult for the given regex, directory path, and file names
     """
     result = DirectoryResult(directory_path)
     def find_matches(name):
         full_path = path.join(directory_path, name)
-        file_contents = get_file_contents(full_path)
+        file_contents = get_file_contents(full_path, binary)
         start = 0
         match = regex.search(file_contents, start)
         while match:
@@ -252,7 +256,8 @@ def main():
 
     search_manager = SearchManager(regex, number_processes=args.number_processes,
                                    search_hidden=args.search_hidden,
-                                   follow_links=args.follow_links)
+                                   follow_links=args.follow_links,
+                                   search_binary=args.search_binary)
     search_manager.search(directory, exclude_path_regexes=exclude_path_regexes,
                           command_strings=args.command_strings)
 

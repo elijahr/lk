@@ -1,7 +1,6 @@
 Arguments
 ---------
 - Find and replace
-- Implement --binary to allow searching in binary files
 - Implement --debug
     - hide KeyboardInterrupts unless debug is on
 
