@@ -23,9 +23,9 @@ setup(name='lk',
       description='A programmer\'s search tool',
       author='Elijah Rutschman',
       author_email='elijahr@gmail.com',
-      url='http://github.com/elijahr/lk',
       license='MIT',
       py_modules=['lk'],
       classifiers=['License :: OSI Approved :: MIT License', 'Topic :: System :: Systems Administration', 'Topic :: Utilities'],
       cmdclass={'install': install},
-     )
+      url = 'http://github.com/elijahr/lk',
+      download_url = 'https://github.com/elijahr/lk/tarball/master')

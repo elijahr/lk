@@ -1,0 +1,14 @@
+Metadata-Version: 1.0
+Name: lk
+Version: 1.0
+Summary: A programmer's search tool
+Home-page: http://github.com/elijahr/lk
+Author: Elijah Rutschman
+Author-email: elijahr@gmail.com
+License: MIT
+Download-URL: https://github.com/elijahr/lk/tarball/master
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Topic :: System :: Systems Administration
+Classifier: Topic :: Utilities

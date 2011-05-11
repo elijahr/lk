@@ -41,9 +41,12 @@ Search for the regex "line_.*" in /home/elijah/Development/lk/
     167:             writer.write_blue(line_result.group)
     168:             writer.write(line_result.right_of_group+'\n')
 
+
 Installation
 ------------
-    $ sudo python setup.py install
+    $ sudo easy_install lk
+or
+    $ sudo pip install lk
 
 Bleeding Edge Installation
 --------------------------
