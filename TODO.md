@@ -3,6 +3,7 @@ Arguments
 - Find and replace
 - Implement --debug
     - hide KeyboardInterrupts unless debug is on
+- Search file paths instead of file contents
 
 Config
 ------

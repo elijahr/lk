@@ -1,0 +1,18 @@
+Metadata-Version: 1.1
+Name: lk
+Version: 1.0
+Author: Elijah Rutschman
+Author-email: elijahr at gmail com
+Home-page: http://github.com/elijahr/lk
+Download-url: https://github.com/downloads/elijahr/lk/lk-1.0.tar.gz
+Summary: A programmer's search tool
+License: MIT
+Description: UNKNOWN
+Platform: UNKNOWN
+Requires: argparse
+Requires: multiprocessing
+Provides: lk
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Topic :: System :: Systems Administration
+Classifier: Topic :: Utilities
+

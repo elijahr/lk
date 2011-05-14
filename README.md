@@ -41,9 +41,22 @@ Search for the regex "line_.*" in /home/elijah/Development/lk/
     167:             writer.write_blue(line_result.group)
     168:             writer.write(line_result.right_of_group+'\n')
 
+
 Installation
 ------------
-    $ sudo python setup.py install
+    $ sudo easy_install lk
+or
+    $ sudo pip install lk
+
+Bleeding Edge Installation
+--------------------------
+If you want to use the latest and greatest version of lk:
+    $ git clone git://github.com/elijahr/lk.git
+    $ cd lk
+    $ sudo chmod +x lk.py
+    $ sudo ln -s `pwd`/lk.py /usr/local/bin/lk
+Then whenever you feel like updating to the latest, just do this:
+    $ cd lk && git pull
 
 Usage
 -----
