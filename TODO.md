@@ -10,3 +10,7 @@ Config
     - set default exclude globs
     - set colors for output
     - set other defaults, like number of processes
+
+Other
+-----
+- smash LineResults together, at least when printing
