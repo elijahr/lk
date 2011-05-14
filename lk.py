@@ -15,7 +15,8 @@ def build_parser():
     arguments for lk
     """
     import argparse
-    parser = argparse.ArgumentParser(description="A programmer's search tool")
+    description = "A programmer's search tool, parallel and fast"
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument('pattern', metavar='PATTERN', action='store',
                         help='a python re regular expression')
     parser.add_argument('--ignore-case', '-i',  dest='ignorecase', action='store_true',

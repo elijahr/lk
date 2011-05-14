@@ -1,5 +1,5 @@
-[lk](http://github.com/elijahr/lk/) - A programmer's search tool
-==================================================
+[lk](http://github.com/elijahr/lk/) - A programmer's search tool, parallel and fast
+===================================================================================
 
 Notes
 -----
@@ -60,28 +60,38 @@ Then whenever you feel like updating to the latest, just do this:
 
 Usage
 -----
-    lk [-h] [--ignore-case] [--no-unicode] [--no-multiline] [--dot-all]
-              [--follow-links] [--hidden] [--num-processes NUMBER_PROCESSES]
-              [--exclude EXCLUDE] [--debug]
-              PATTERN [DIRECTORY]
+usage: lk [-h] [--ignore-case] [--no-unicode] [--no-multiline] [--dot-all]
+          [--follow-links] [--hidden] [--binary] [--no-colors] [--stats]
+          [--num-processes NUMBER_PROCESSES] [--exclude PATH_PATTERN]
+          [--open-with COMMAND]
+          PATTERN [DIRECTORY]
 
-    positional arguments:
-      PATTERN               a python re regular expression
-      DIRECTORY             a directory to search in (default cwd)
+A programmer's search tool, parallel and fast
 
-    optional arguments:
-      -h, --help            show this help message and exit
-      --ignore-case, -i     ignore case when searching
-      --no-unicode, -u      unicode-unfriendly searching
-      --no-multiline, -l    don't search over multiple lines
-      --dot-all, -a         dot in pattern matches newline
-      --follow-links, -s    follow symlinks
-      --hidden, -n          search hidden files and directories
-      --num-processes NUMBER_PROCESSES, -p NUMBER_PROCESSES
-                            number of child processes to concurrently search with
-      --exclude EXCLUDE, -x EXCLUDE
-                            exclude
-      --debug, -d           print debug output
+positional arguments:
+  PATTERN               a python re regular expression
+  DIRECTORY             a directory to search in (default cwd)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --ignore-case, -i     ignore case when searching
+  --no-unicode, -u      unicode-unfriendly searching
+  --no-multiline, -l    don't search over multiple lines
+  --dot-all, -a         dot in pattern matches newline
+  --follow-links, -s    follow symlinks
+  --hidden, -n          search hidden files and directories
+  --binary, -b          search binary files
+  --no-colors, -c       don't print ANSI colors
+  --stats, -t           print statistics
+  --num-processes NUMBER_PROCESSES, -p NUMBER_PROCESSES
+                        number of child processes to concurrently search with
+  --exclude PATH_PATTERN, -x PATH_PATTERN
+                        exclude paths matching PATH_PATTERN
+  --open-with COMMAND, -o COMMAND
+                        run each COMMAND where COMMAND is a string with a
+                        placeholder, %s, for the absolute path of the matched
+                        file
+
 
 Issues?
 -------
