@@ -52,7 +52,7 @@ def build_parser():
     parser.add_argument('--open-with', '-o', metavar='COMMAND',
                         dest='command_strings', action='append', default=[],
                         type=str,
-                        help='run each COMMAND where COMMAND is a string with a placeholder, %s, for the absolute path of the matched file')
+                        help='run each COMMAND where COMMAND is a string with a placeholder, %%s, for the absolute path of the matched file')
 #    parser.add_argument('--debug', '-d', dest='debug',
 #                        action='store_true', default=False,
 #                        help='print debug output')
