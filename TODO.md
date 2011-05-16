@@ -12,6 +12,6 @@ Config
     - set colors for output
     - set other defaults, like number of processes
 
-Installation
-------------
-- Requirements: multiprocessing, argparse... what else?
+Other
+-----
+- smash LineResults together, at least when printing

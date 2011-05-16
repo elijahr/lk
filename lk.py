@@ -4,6 +4,7 @@ A programmer's search tool
 """
 import re
 import sys
+import datetime
 from subprocess import Popen
 from multiprocessing import Pool, Manager, Process
 from os import sep as directory_separator, getcwd, path, walk
@@ -14,7 +15,8 @@ def build_parser():
     arguments for lk
     """
     import argparse
-    parser = argparse.ArgumentParser(description="A programmer's search tool")
+    description = "A programmer's search tool, parallel and fast"
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument('pattern', metavar='PATTERN', action='store',
                         help='a python re regular expression')
     parser.add_argument('--ignore-case', '-i',  dest='ignorecase', action='store_true',
@@ -36,6 +38,12 @@ def build_parser():
     parser.add_argument('--binary', '-b', dest='search_binary',
                         action='store_true', default=False,
                         help='search binary files')
+    parser.add_argument('--no-colors', '-c', dest='use_ansi_colors',
+                        action='store_false', default=True,
+                        help="don't print ANSI colors")
+    parser.add_argument('--stats', '-t', dest='print_stats',
+                        action='store_true', default=False,
+                        help='print statistics')
     parser.add_argument('--num-processes', '-p', dest='number_processes',
                         action='store', default=10, type=int,
                         help='number of child processes to concurrently search with')
@@ -73,14 +81,16 @@ class SearchManager(object):
 
     hidden_file_regex = re.compile('^\..*$', re.UNICODE | re.LOCALE)
 
-    def __init__(self, regex, number_processes=10, chunk_size=10,
-                 search_hidden=False, follow_links=False, search_binary=False):
+    def __init__(self, regex, number_processes=10, search_hidden=False,
+                 follow_links=False, search_binary=False, use_ansi_colors=True,
+                 print_stats=False):
         self.regex = regex
+        self.pool = Pool(processes=number_processes)
         self.search_hidden = search_hidden
         self.follow_links = follow_links
         self.search_binary = search_binary
-        self.pool = Pool(processes=number_processes)
-        self.chunk_size = chunk_size
+        self.use_ansi_colors = use_ansi_colors
+        self.print_stats = print_stats
         self.manager = Manager()
 
     def search(self, directory, exclude_path_regexes=[], command_strings=[]):
@@ -88,6 +98,9 @@ class SearchManager(object):
         start a new pool of parallel search processes for self.regex in
         directory
         """
+
+        mark = datetime.datetime.now()
+
         if not self.search_hidden:
             exclude_path_regexes.append(self.hidden_file_regex)
 
@@ -113,7 +126,7 @@ class SearchManager(object):
                 yield directory_path, directory_names, file_names
 
         def callback(directory_result):
-            print_result(directory_result)
+            print_result(directory_result, self.use_ansi_colors)
             for command_string in command_strings:
                 if command_string.find('%s') < 0:
                     command_string += ' %s'
@@ -124,20 +137,35 @@ class SearchManager(object):
 
         for directory_path, directory_names, file_names in search_walk():
             args = (self.regex, directory_path, file_names, self.search_binary)
-            self.pool.apply_async(search_path, args, callback=callback)
+            self.pool.apply_async(search_worker, args, callback=callback)
+
+        self.pool.close()
+        self.pool.join()
+
+        if self.print_stats:
+            mark = datetime.datetime.now() - mark
+            print 'search completed in %s seconds ' % mark.seconds
 
 class ColorWriter(object):
     """'
     an object that wraps a file handler and can output ANSI color codes
     """
-    GREEN = '\033[92m'
-    BLUE = '\033[94m'
-    END_COLOR = '\033[0m'
-
     def __init__(self, output=None):
+        self.GREEN = '\033[92m'
+        self.BLUE = '\033[94m'
+        self.END_COLOR = '\033[0m'
+
         if output == None:
             output = sys.stdout
         self.output = output
+
+        if not output.isatty():
+            self.disable_colors()
+
+    def disable_colors(self):
+        self.GREEN = ''
+        self.BLUE = ''
+        self.END_COLOR = ''
 
     def write(self, text):
         self.output.write(text)
@@ -148,26 +176,33 @@ class ColorWriter(object):
     def write_blue(self, text):
         self.output.write(self.BLUE + text + self.END_COLOR)
 
-def search_path(regex, directory_path, names, binary):
+def search_worker(regex, directory_path, names, binary):
     """
     build a DirectoryResult for the given regex, directory path, and file names
     """
-    result = DirectoryResult(directory_path)
-    def find_matches(name):
-        full_path = path.join(directory_path, name)
-        file_contents = get_file_contents(full_path, binary)
-        start = 0
-        match = regex.search(file_contents, start)
-        while match:
-            result.put(name, file_contents, match)
-            start = match.end()
+    try:
+        result = DirectoryResult(directory_path)
+        def find_matches(name):
+            full_path = path.join(directory_path, name)
+            file_contents = get_file_contents(full_path, binary)
+            start = 0
             match = regex.search(file_contents, start)
-    for name in names:
-        try:
-            find_matches(name)
-        except IOError:
-            pass
-    return result
+            while match:
+                result.put(name, file_contents, match)
+                start = match.end()
+                match = regex.search(file_contents, start)
+        for name in names:
+            try:
+                find_matches(name)
+            except IOError:
+                pass
+        return result
+    except KeyboardInterrupt as e:
+        raise KeyboardInterruptError(e)
+
+class KeyboardInterruptError(BaseException):
+    def __init__(self, keyboard_interrupt):
+        self.keyboard_interrupt = keyboard_interrupt
 
 class DirectoryResult(object):
     """
@@ -211,11 +246,13 @@ class LineResult(object):
         self.right_of_group = right_of_group # right of group
 
 writer = ColorWriter(sys.stdout)
-def print_result(directory_result):
+def print_result(directory_result, use_ansi_colors):
     """
     Print out the contents of the directory result, using ANSI color codes if
     supported
     """
+    if not use_ansi_colors:
+        writer.disable_colors()
     for file_name, line_results in directory_result.iter_line_results_items():
         full_path = path.join(directory_result.directory_path, file_name)
         writer.write('\n')
@@ -259,14 +296,19 @@ def main():
         re.compile(exclude_path_pattern, exclude_path_flags)
         for exclude_path_pattern in args.exclude_path_patterns]
 
-    search_manager = SearchManager(regex, 
-                                   number_processes=args.number_processes,
-                                   search_hidden=args.search_hidden,
-                                   follow_links=args.follow_links,
-                                   search_binary=args.search_binary)
+    try:
+        search_manager = SearchManager(regex=regex,
+                                       number_processes=args.number_processes,
+                                       search_hidden=args.search_hidden,
+                                       follow_links=args.follow_links,
+                                       search_binary=args.search_binary,
+                                       use_ansi_colors=args.use_ansi_colors,
+                                       print_stats=args.print_stats)
 
-    search_manager.search(directory, exclude_path_regexes=exclude_path_regexes,
-                          command_strings=args.command_strings)
+        search_manager.search(directory, exclude_path_regexes=exclude_path_regexes,
+                              command_strings=args.command_strings)
+    except KeyboardInterruptError as e:
+        raise e.keyboard_interrupt
 
 if __name__ == '__main__':
     main()
