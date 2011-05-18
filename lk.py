@@ -255,14 +255,14 @@ def print_result(directory_result, use_ansi_colors):
         writer.disable_colors()
     for file_name, line_results in directory_result.iter_line_results_items():
         full_path = path.join(directory_result.directory_path, file_name)
-        writer.write('\n')
-        writer.write_green('%s:' % full_path)
+        writer.write_green(full_path)
         writer.write('\n')
         for line_result in line_results:
             writer.write('%s: ' % (line_result.line_number))
             writer.write(line_result.left_of_group)
             writer.write_blue(line_result.group)
             writer.write(line_result.right_of_group+'\n')
+        writer.write('\n')
 
 def main():
     """
