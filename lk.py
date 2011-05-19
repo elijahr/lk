@@ -200,7 +200,7 @@ def search_worker(regex, directory_path, names, binary):
     except KeyboardInterrupt, e:
         raise KeyboardInterruptError(e)
 
-class KeyboardInterruptError(BaseException):
+class KeyboardInterruptError(Exception):
     def __init__(self, keyboard_interrupt):
         self.keyboard_interrupt = keyboard_interrupt
 
