@@ -197,7 +197,7 @@ def search_worker(regex, directory_path, names, binary):
             except IOError:
                 pass
         return result
-    except KeyboardInterrupt as e:
+    except KeyboardInterrupt, e:
         raise KeyboardInterruptError(e)
 
 class KeyboardInterruptError(BaseException):
@@ -307,8 +307,8 @@ def main():
 
         search_manager.search(directory, exclude_path_regexes=exclude_path_regexes,
                               command_strings=args.command_strings)
-    except KeyboardInterruptError as e:
-        raise e.keyboard_interrupt
+    except KeyboardInterruptError, e:
+        raise KeyboardInterrupt(e)
 
 if __name__ == '__main__':
     main()
