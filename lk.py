@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-A programmer's search tool
+A programmer's search tool, parallel and fast
 """
 import re
 import sys
