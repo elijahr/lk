@@ -6,7 +6,8 @@ import re
 import sys
 import datetime
 from subprocess import Popen
-from multiprocessing import Pool, Manager, Process
+from collections import deque
+from multiprocessing import Process
 from os import sep as directory_separator, getcwd, path, walk
 
 def build_parser():
@@ -29,9 +30,10 @@ def build_parser():
     parser.add_argument('--dot-all', '-a', dest='dot_all',
                         action='store_true', default=False,
                         help='dot in pattern matches newline')
-    parser.add_argument('--follow-links', '-s', dest='follow_links',
-                        action='store_true', default=False,
-                        help='follow symlinks (ignored in Python < 2.6)')
+    if sys.version_info >= (2, 6):
+        parser.add_argument('--follow-links', '-s', dest='follow_links',
+                            action='store_true', default=False,
+                            help='follow symlinks (Python >= 2.6 only)')
     parser.add_argument('--hidden', '-n', dest='search_hidden',
                         action='store_true', default=False,
                         help='search hidden files and directories')
@@ -54,9 +56,6 @@ def build_parser():
                         dest='command_strings', action='append', default=[],
                         type=str,
                         help='run each COMMAND where COMMAND is a string with a placeholder, %%s, for the absolute path of the matched file')
-#    parser.add_argument('--debug', '-d', dest='debug',
-#                        action='store_true', default=False,
-#                        help='print debug output')
     parser.add_argument('directory', metavar='DIRECTORY', nargs='?',
                         default=getcwd(), help='a directory to search in (default cwd)')
     return parser
@@ -78,56 +77,65 @@ class SearchManager(object):
     """
     An object for handling parallel searches of a regex
     """
-
     hidden_file_regex = re.compile('^\..*$', re.UNICODE | re.LOCALE)
 
     def __init__(self, regex, number_processes=10, search_hidden=False,
                  follow_links=False, search_binary=False, use_ansi_colors=True,
-                 print_stats=False):
+                 print_stats=False, exclude_path_regexes=[], command_strings=[]):
         self.regex = regex
-        self.pool = Pool(processes=number_processes)
+        self.queue = deque([])
+#        self.pools = []
+        self.number_processes = number_processes
         self.search_hidden = search_hidden
         self.follow_links = follow_links
         self.search_binary = search_binary
         self.use_ansi_colors = use_ansi_colors
         self.print_stats = print_stats
-        self.manager = Manager()
+        self.exclude_path_regexes = exclude_path_regexes
+        self.command_strings = command_strings
+        self.mark = None
 
-    def search(self, directory, exclude_path_regexes=[], command_strings=[]):
+    def enqueue_directory(self, directory):
         """
-        start a new pool of parallel search processes for self.regex in
-        directory
+        add a search of the directory to the queue
         """
 
-        mark = datetime.datetime.now()
+        exclude_path_regexes = self.exclude_path_regexes[:]
 
         if not self.search_hidden:
             exclude_path_regexes.append(self.hidden_file_regex)
+        else:
+            exclude_path_regexes.remove(self.hidden_file_regex)
 
-        def filt(name):
+        self.mark = datetime.datetime.now()
+
+        def is_path_excluded(path):
             """
             return True if name matches on of the regexes in
             exclude_path_regexes, False otherwise
             """
             for exclude_path_regex in exclude_path_regexes:
-                for found in exclude_path_regex.finditer(name):
+                for found in exclude_path_regex.finditer(path):
                     return False
             return True
 
         def search_walk():
-            if sys.version_info >= (2, 6):
+            try:
                 walk_generator = walk(directory, followlinks=self.follow_links)
-            else:
+            except TypeError:
+                # for python less than 2.6
                 walk_generator = walk(directory)
+
             for packed in walk_generator:
                 directory_path, directory_names, file_names = packed
-                directory_names[:] = filter(filt, directory_names)
-                file_names[:] = filter(filt, file_names)
+                directory_names[:] = filter(is_path_excluded, directory_names)
+                file_names[:] = filter(is_path_excluded, file_names)
                 yield directory_path, directory_names, file_names
 
+        writer = ColorWriter(sys.stdout, self.use_ansi_colors)
         def callback(directory_result):
-            print_result(directory_result, self.use_ansi_colors)
-            for command_string in command_strings:
+            writer.print_result(directory_result)
+            for command_string in self.command_strings:
                 if command_string.find('%s') < 0:
                     command_string += ' %s'
                 for file_name, line_result in directory_result.iter_line_results_items():
@@ -136,69 +144,105 @@ class SearchManager(object):
                     break
 
         for directory_path, directory_names, file_names in search_walk():
-            args = (self.regex, directory_path, file_names, self.search_binary)
-            self.pool.apply_async(search_worker, args, callback=callback)
+            process = Process(target=self.search_worker, args=(self.regex,
+                                                               directory_path,
+                                                               file_names,
+                                                               self.search_binary,
+                                                               callback))
+            self.queue.append(process)
 
-        self.pool.close()
-        self.pool.join()
+    def search_worker(self, regex, directory_path, names, binary=False,
+                      callback=None):
+        """
+        build a DirectoryResult for the given regex, directory path, and file names
+        """
+        try:
+            result = DirectoryResult(directory_path)
+            def find_matches(name):
+                full_path = path.join(directory_path, name)
+                file_contents = get_file_contents(full_path, binary)
+                start = 0
+                match = regex.search(file_contents, start)
+                while match:
+                    result.put(name, file_contents, match)
+                    start = match.end()
+                    match = regex.search(file_contents, start)
+            for name in names:
+                try:
+                    find_matches(name)
+                except IOError:
+                    pass
+            if callback:
+                callback(result)
+        except KeyboardInterrupt, e:
+            raise KeyboardInterruptError(e)
 
+    def process_queue(self):
+        counter = 0
+        processes = deque([])
+        while True:
+            if counter < self.number_processes:
+                try:
+                    process = self.queue.popleft()
+                    process.start()
+                    processes.append(process)
+                    counter += 1
+                except IndexError:
+                    break
+            else:
+                try:
+                    process = processes.popleft()
+                    process.join()
+                    counter -= 1
+                except IndexError:
+                    pass
         if self.print_stats:
-            mark = datetime.datetime.now() - mark
+            mark = datetime.datetime.now() - self.mark
             print 'search completed in %s seconds ' % mark.seconds
 
 class ColorWriter(object):
     """'
     an object that wraps a file handler and can output ANSI color codes
     """
-    def __init__(self, output=None):
-        self.GREEN = '\033[92m'
-        self.BLUE = '\033[94m'
-        self.END_COLOR = '\033[0m'
 
-        if output == None:
-            output = sys.stdout
-        self.output = output
-
-        if not output.isatty():
+    def __init__(self, output=None, use_ansi_colors=True):
+        self.output = output if output else sys.stdout
+        if use_ansi_colors and self.output.isatty():
+            self.enable_colors()
+        else:
             self.disable_colors()
 
+    def enable_colors(self):
+        self.colors = {
+            'green': '\033[92m',
+            'blue': '\033[94m',
+            'end': '\033[0m',
+        }
+
     def disable_colors(self):
-        self.GREEN = ''
-        self.BLUE = ''
-        self.END_COLOR = ''
+        self.colors = {
+            'green': '', 'blue': '', 'end': ''
+        }
 
-    def write(self, text):
-        self.output.write(text)
+    def write(self, string, color=None):
+        s = (self.colors[color]+string+self.colors['end']) if color else string
+        self.output.write(s)
 
-    def write_green(self, text):
-        self.output.write(self.GREEN + text + self.END_COLOR)
-
-    def write_blue(self, text):
-        self.output.write(self.BLUE + text + self.END_COLOR)
-
-def search_worker(regex, directory_path, names, binary):
-    """
-    build a DirectoryResult for the given regex, directory path, and file names
-    """
-    try:
-        result = DirectoryResult(directory_path)
-        def find_matches(name):
-            full_path = path.join(directory_path, name)
-            file_contents = get_file_contents(full_path, binary)
-            start = 0
-            match = regex.search(file_contents, start)
-            while match:
-                result.put(name, file_contents, match)
-                start = match.end()
-                match = regex.search(file_contents, start)
-        for name in names:
-            try:
-                find_matches(name)
-            except IOError:
-                pass
-        return result
-    except KeyboardInterrupt, e:
-        raise KeyboardInterruptError(e)
+    def print_result(self, directory_result):
+        """
+        Print out the contents of the directory result, using ANSI color codes if
+        supported
+        """
+        for file_name, line_results in directory_result.iter_line_results_items():
+            full_path = path.join(directory_result.directory_path, file_name)
+            self.write(full_path, 'green')
+            self.write('\n')
+            for line_result in line_results:
+                self.write('%s: ' % (line_result.line_number))
+                self.write(line_result.left_of_group)
+                self.write(line_result.group, 'blue')
+                self.write(line_result.right_of_group+'\n')
+            self.write('\n')
 
 class KeyboardInterruptError(Exception):
     def __init__(self, keyboard_interrupt):
@@ -241,28 +285,9 @@ class LineResult(object):
                  group, right_of_group):
         self.line_number = line_number
         self.left_offset = left_offset
-        self.left_of_group = left_of_group # left of group
+        self.left_of_group = left_of_group
         self.group = group
-        self.right_of_group = right_of_group # right of group
-
-writer = ColorWriter(sys.stdout)
-def print_result(directory_result, use_ansi_colors):
-    """
-    Print out the contents of the directory result, using ANSI color codes if
-    supported
-    """
-    if not use_ansi_colors:
-        writer.disable_colors()
-    for file_name, line_results in directory_result.iter_line_results_items():
-        full_path = path.join(directory_result.directory_path, file_name)
-        writer.write_green(full_path)
-        writer.write('\n')
-        for line_result in line_results:
-            writer.write('%s: ' % (line_result.line_number))
-            writer.write(line_result.left_of_group)
-            writer.write_blue(line_result.group)
-            writer.write(line_result.right_of_group+'\n')
-        writer.write('\n')
+        self.right_of_group = right_of_group
 
 def main():
     """
@@ -285,28 +310,25 @@ def main():
     if args.multiline:
         flags |= re.MULTILINE
 
-#    if not args.debug:
-#        sys.stderr = NullDevice()
-
     exclude_path_flags = re.UNICODE | re.LOCALE
-
-    regex = re.compile(args.pattern, flags)
-    directory = args.directory
     exclude_path_regexes = [
-        re.compile(exclude_path_pattern, exclude_path_flags)
-        for exclude_path_pattern in args.exclude_path_patterns]
+        re.compile(pattern, exclude_path_flags)
+        for pattern in args.exclude_path_patterns]
 
     try:
-        search_manager = SearchManager(regex=regex,
+        search_manager = SearchManager(regex=re.compile(args.pattern, flags),
                                        number_processes=args.number_processes,
                                        search_hidden=args.search_hidden,
                                        follow_links=args.follow_links,
                                        search_binary=args.search_binary,
                                        use_ansi_colors=args.use_ansi_colors,
-                                       print_stats=args.print_stats)
+                                       print_stats=args.print_stats,
+                                       exclude_path_regexes=exclude_path_regexes,
+                                       command_strings=args.command_strings)
 
-        search_manager.search(directory, exclude_path_regexes=exclude_path_regexes,
-                              command_strings=args.command_strings)
+        search_manager.enqueue_directory(args.directory)
+        search_manager.process_queue()
+
     except KeyboardInterruptError, e:
         raise KeyboardInterrupt(e)
 
