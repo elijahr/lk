@@ -7,7 +7,8 @@ import sys
 import datetime
 from subprocess import Popen
 from collections import deque
-from multiprocessing import Process
+from multiprocessing import Process as Thread
+
 from os import sep as directory_separator, getcwd, path, walk
 
 def build_parser():
@@ -144,7 +145,7 @@ class SearchManager(object):
                     break
 
         for directory_path, directory_names, file_names in search_walk():
-            process = Process(target=self.search_worker, args=(self.regex,
+            process = Thread(target=self.search_worker, args=(self.regex,
                                                                directory_path,
                                                                file_names,
                                                                self.search_binary,
@@ -233,15 +234,20 @@ class ColorWriter(object):
         Print out the contents of the directory result, using ANSI color codes if
         supported
         """
-        for file_name, line_results in directory_result.iter_line_results_items():
+        for file_name, line_results_dict in directory_result.iter_line_results_items():
             full_path = path.join(directory_result.directory_path, file_name)
             self.write(full_path, 'green')
             self.write('\n')
-            for line_result in line_results:
-                self.write('%s: ' % (line_result.line_number))
-                self.write(line_result.left_of_group)
-                self.write(line_result.group, 'blue')
-                self.write(line_result.right_of_group+'\n')
+            for line_number, line_results in sorted(line_results_dict.items()):
+                self.write('%s: ' % (line_results[0].line_number))
+                out = list(line_results[0].left_of_group + line_results[0].group + line_results[0].right_of_group)
+                offset = 0
+                for line_result in line_results:
+                    group_length = len(line_result.group)
+                    out.insert(offset+line_result.left_offset-1, self.colors['blue'])
+                    out.insert(offset+line_result.left_offset+group_length, self.colors['end'])
+                    offset += group_length + 1
+                self.write(''.join(out)+'\n')
             self.write('\n')
 
 class KeyboardInterruptError(Exception):
@@ -269,8 +275,11 @@ class DirectoryResult(object):
                                  left_of_group, group, right_of_group)
 
         if not file_name in self._line_results:
-            self._line_results[file_name] = []
-        self._line_results[file_name].append(line_result)
+            self._line_results[file_name] = {}
+        if not line_result.line_number in self._line_results[file_name]:
+            self._line_results[file_name][line_result.line_number] = []
+
+        self._line_results[file_name][line_result.line_number].append(line_result)
 
     def iter_line_results_items(self):
         for item in self._line_results.iteritems():
@@ -311,9 +320,8 @@ def main():
         flags |= re.MULTILINE
 
     exclude_path_flags = re.UNICODE | re.LOCALE
-    exclude_path_regexes = [
-        re.compile(pattern, exclude_path_flags)
-        for pattern in args.exclude_path_patterns]
+    exclude_path_regexes = [ re.compile(pattern, exclude_path_flags)
+                             for pattern in args.exclude_path_patterns ]
 
     try:
         search_manager = SearchManager(regex=re.compile(args.pattern, flags),
