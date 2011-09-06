@@ -7,7 +7,7 @@ import sys
 import datetime
 from subprocess import Popen
 from collections import deque
-from multiprocessing import Process as Thread
+from multiprocessing import Process
 
 from os import sep as directory_separator, getcwd, path, walk
 
@@ -134,7 +134,7 @@ class SearchManager(object):
                 yield directory_path, directory_names, file_names
 
         writer = ColorWriter(sys.stdout, self.use_ansi_colors)
-        def callback(directory_result):
+        def print_directory_result(directory_result):
             writer.print_result(directory_result)
             for command_string in self.command_strings:
                 if command_string.find('%s') < 0:
@@ -145,11 +145,12 @@ class SearchManager(object):
                     break
 
         for directory_path, directory_names, file_names in search_walk():
-            process = Thread(target=self.search_worker, args=(self.regex,
-                                                               directory_path,
-                                                               file_names,
-                                                               self.search_binary,
-                                                               callback))
+            process = Process(target=self.search_worker,
+                             args=(self.regex,
+                                   directory_path,
+                                   file_names,
+                                   self.search_binary,
+                                   print_directory_result))
             self.queue.append(process)
 
     def search_worker(self, regex, directory_path, names, binary=False,
@@ -176,7 +177,7 @@ class SearchManager(object):
             if callback:
                 callback(result)
         except KeyboardInterrupt, e:
-            raise KeyboardInterruptError(e)
+            exit(1)
 
     def process_queue(self):
         counter = 0
@@ -322,7 +323,6 @@ def main():
     exclude_path_flags = re.UNICODE | re.LOCALE
     exclude_path_regexes = [ re.compile(pattern, exclude_path_flags)
                              for pattern in args.exclude_path_patterns ]
-
     try:
         search_manager = SearchManager(regex=re.compile(args.pattern, flags),
                                        number_processes=args.number_processes,
@@ -337,8 +337,9 @@ def main():
         search_manager.enqueue_directory(args.directory)
         search_manager.process_queue()
 
-    except KeyboardInterruptError, e:
-        raise KeyboardInterrupt(e)
+    except (KeyboardInterruptError, KeyboardInterrupt):
+        sys.stdout.write('\n')
+        exit(1)
 
 if __name__ == '__main__':
     main()
