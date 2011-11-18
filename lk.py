@@ -30,7 +30,11 @@ def build_parser():
                         help='don\'t search over multiple lines')
     parser.add_argument('--dot-all', '-a', dest='dot_all',
                         action='store_true', default=False,
-                        help='dot in pattern matches newline')
+                        help='dot in PATTERN matches newline')
+    parser.add_argument('--escape', '-e', dest='escape',
+                        action='store_true', default=False,
+                        help='treat PATTERN as a string instead of a regex')
+
     if sys.version_info >= (2, 6):
         parser.add_argument('--follow-links', '-s', dest='follow_links',
                             action='store_true', default=False,
@@ -323,8 +327,11 @@ def main():
     exclude_path_flags = re.UNICODE | re.LOCALE
     exclude_path_regexes = [ re.compile(pattern, exclude_path_flags)
                              for pattern in args.exclude_path_patterns ]
+
+    pattern = re.escape(args.pattern) if args.escape else args.pattern
+
     try:
-        search_manager = SearchManager(regex=re.compile(args.pattern, flags),
+        search_manager = SearchManager(regex=re.compile(pattern, flags),
                                        number_processes=args.number_processes,
                                        search_hidden=args.search_hidden,
                                        follow_links=args.follow_links,
