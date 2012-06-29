@@ -2,3 +2,4 @@ build/*
 temp/*
 dist/*
 lk.egg-info/*
+*.sublime-*
