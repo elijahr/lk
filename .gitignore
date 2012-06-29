@@ -3,3 +3,4 @@ temp/*
 dist/*
 lk.egg-info/*
 *.sublime-*
+*.pyc
