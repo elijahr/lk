@@ -3,7 +3,7 @@ from setuptools import setup
 import sys
 
 meta = dict(name='lk',
-    version='1.1',
+    version='1.2',
     description='A programmer\'s search tool, parallel and fast',
     author='Elijah Rutschman',
     author_email='elijahr@gmail.com',
